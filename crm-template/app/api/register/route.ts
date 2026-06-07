@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/app/lib/prisma";
+import crypto from "crypto";
+import { transporter } from "@/app/lib/nodemailer";
 
 export async function POST(request: Request) {
   try {
@@ -29,15 +31,31 @@ export async function POST(request: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
+    const token = crypto.randomBytes(32).toString("hex");
 
     const user = await prisma.users.create({
       data: {
         username,
         email,
         password: hashedPassword,
+        token: token,
       },
     });
+    const DOMAIN = process.env.NEXT_PUBLIC_DOMAIN;
 
+    const confirmUrl = `${DOMAIN}/confirmAccount?t=${token}`;
+
+    await transporter.sendMail({
+      from: process.env.GMAIL_USER,
+      to: email,
+      subject: "Potvrzení účtu",
+      html: `
+        <h2>Vítej 👋</h2>
+        <p>Klikni pro aktivaci účtu:</p>
+        <a href="${confirmUrl}">${confirmUrl}</a>
+      `,
+    });
+    
     return NextResponse.json(
       {
         message: "Registrace proběhla úspěšně",
