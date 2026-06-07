@@ -1,50 +1,59 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/app/lib/prisma";
 
 export async function POST(request: Request) {
   try {
-    const { username, email, password } = await request.json();
+    const body = await request.json();
 
-    const existingUser = await prisma.users.findFirst({
+    const { username, email, password } = body;
+
+    if (!username || !email || !password) {
+      return NextResponse.json(
+        { message: "Chybí povinná pole" },
+        { status: 400 }
+      );
+    }
+
+    const existingUser = await prisma.users.findUnique({
       where: {
-        OR: [{ username }, { email }],
+        email,
       },
     });
 
     if (existingUser) {
       return NextResponse.json(
-        { success: false, message: "Username nebo email již existuje." },
+        { message: "Uživatel již existuje" },
         { status: 409 }
       );
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const token = crypto.randomBytes(32).toString("hex");
 
     const user = await prisma.users.create({
       data: {
         username,
         email,
         password: hashedPassword,
-        token,
-        active: false,
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      id: user.id,
-      message: "Registrace proběhla úspěšně.",
-    });
+    return NextResponse.json(
+      {
+        message: "Registrace proběhla úspěšně",
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+        },
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    console.error("REGISTER ERROR:", error);
+    console.error(error);
 
     return NextResponse.json(
-      { success: false, message: "Interní chyba serveru." },
+      { message: "Interní chyba serveru" },
       { status: 500 }
     );
   }
